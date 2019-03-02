@@ -235,7 +235,6 @@ class InstanceDescriptor(SimpleDescriptor):
         self.localisedStyleMapStyleName = {}
         self.localisedStyleMapFamilyName = {}
         self.glyphs = {}
-        self.mutedGlyphNames = []
         self.kerning = True
         self.info = True
 
@@ -246,25 +245,25 @@ class InstanceDescriptor(SimpleDescriptor):
     filename = posixpath_property("_filename")
 
     def setStyleName(self, styleName, languageCode="en"):
-        self.localisedStyleName[languageCode] = styleName
+        self.localisedStyleName[languageCode] = tounicode(styleName)
 
     def getStyleName(self, languageCode="en"):
         return self.localisedStyleName.get(languageCode)
 
     def setFamilyName(self, familyName, languageCode="en"):
-        self.localisedFamilyName[languageCode] = familyName
+        self.localisedFamilyName[languageCode] = tounicode(familyName)
 
     def getFamilyName(self, languageCode="en"):
         return self.localisedFamilyName.get(languageCode)
 
     def setStyleMapStyleName(self, styleMapStyleName, languageCode="en"):
-        self.localisedStyleMapStyleName[languageCode] = styleMapStyleName
+        self.localisedStyleMapStyleName[languageCode] = tounicode(styleMapStyleName)
 
     def getStyleMapStyleName(self, languageCode="en"):
         return self.localisedStyleMapStyleName.get(languageCode)
 
     def setStyleMapFamilyName(self, styleMapFamilyName, languageCode="en"):
-        self.localisedStyleMapFamilyName[languageCode] = styleMapFamilyName
+        self.localisedStyleMapFamilyName[languageCode] = tounicode(styleMapFamilyName)
 
     def getStyleMapFamilyName(self, languageCode="en"):
         return self.localisedStyleMapFamilyName.get(languageCode)
@@ -673,12 +672,6 @@ class BaseDocReader(LogMixin):
         self.readInstances()
         self.readLib()
 
-    def getSourcePaths(self, makeGlyphs=True, makeKerning=True, makeInfo=True):
-        paths = []
-        for name in self.documentObject.sources.keys():
-            paths.append(self.documentObject.sources[name][0].path)
-        return paths
-
     def readRules(self):
         # we also need to read any conditions that are outside of a condition set.
         rules = []
@@ -759,8 +752,7 @@ class BaseDocReader(LogMixin):
                 # '{http://www.w3.org/XML/1998/namespace}lang'
                 for key, lang in labelNameElement.items():
                     if key == XML_LANG:
-                        labelName = labelNameElement.text
-                        axisObject.labelNames[lang] = labelName
+                        axisObject.labelNames[lang] = tounicode(labelNameElement.text)
             self.documentObject.axes.append(axisObject)
             self.axisDefaults[axisObject.name] = axisObject.default
         self.documentObject.defaultLoc = self.axisDefaults
@@ -1053,6 +1045,8 @@ class DesignSpaceDocument(LogMixin, AsDictMixin):
         return f.getvalue()
 
     def read(self, path):
+        if hasattr(path, "__fspath__"):  # support os.PathLike objects
+            path = path.__fspath__()
         self.path = path
         self.filename = os.path.basename(path)
         reader = self.readerClass(path, self)
@@ -1061,6 +1055,8 @@ class DesignSpaceDocument(LogMixin, AsDictMixin):
             self.findDefault()
 
     def write(self, path):
+        if hasattr(path, "__fspath__"):  # support os.PathLike objects
+            path = path.__fspath__()
         self.path = path
         self.filename = os.path.basename(path)
         self.updatePaths()
@@ -1113,21 +1109,11 @@ class DesignSpaceDocument(LogMixin, AsDictMixin):
 
 
         """
+        assert self.path is not None
         for descriptor in self.sources + self.instances:
-            # check what the relative path really should be?
-            expectedFilename = None
-            if descriptor.path is not None and self.path is not None:
-                expectedFilename = self._posixRelativePath(descriptor.path)
-
-            # 3
-            if descriptor.filename is None and descriptor.path is not None and self.path is not None:
+            if descriptor.path is not None:
+                # case 3 and 4: filename gets updated and relativized
                 descriptor.filename = self._posixRelativePath(descriptor.path)
-                continue
-
-            # 4
-            if descriptor.filename is not None and descriptor.path is not None and self.path is not None:
-                if descriptor.filename is not expectedFilename:
-                    descriptor.filename = expectedFilename
 
     def addSource(self, sourceDescriptor):
         self.sources.append(sourceDescriptor)

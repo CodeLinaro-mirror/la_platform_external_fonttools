@@ -34,6 +34,7 @@ from fontTools.ufoLib.validators import (
 	glyphLibValidator,
 )
 from fontTools.misc import etree
+from fontTools.ufoLib import _UFOBaseIO
 from fontTools.ufoLib.utils import integerTypes, numberTypes
 
 
@@ -88,7 +89,7 @@ class Glyph(object):
 # Glyph Set
 # ---------
 
-class GlyphSet(object):
+class GlyphSet(_UFOBaseIO):
 
 	"""
 	GlyphSet manages a set of .glif files inside one directory.
@@ -168,9 +169,6 @@ class GlyphSet(object):
 		self._reverseContents = None
 
 		self.rebuildContents()
-
-	# here we reuse the same methods from UFOReader/UFOWriter
-	from fontTools.ufoLib import _getPlist, _writePlist, _getFileModificationTime
 
 	def rebuildContents(self, validateRead=None):
 		"""
@@ -292,7 +290,7 @@ class GlyphSet(object):
 		"""
 		fileName = self.contents[glyphName]
 		try:
-			return self.fs.getbytes(fileName)
+			return self.fs.readbytes(fileName)
 		except fs.errors.ResourceNotFound:
 			raise GlifLibError(
 				"The file '%s' associated with glyph '%s' in contents.plist "
@@ -308,7 +306,7 @@ class GlyphSet(object):
 		Raises KeyError if the glyphName is not in contents.plist.
 		"""
 		fileName = self.contents[glyphName]
-		return self._getFileModificationTime(fileName)
+		return self.getFileModificationTime(fileName)
 
 	# reading/writing API
 
@@ -318,7 +316,7 @@ class GlyphSet(object):
 		'glyphObject' argument can be any kind of object (even None);
 		the readGlyph() method will attempt to set the following
 		attributes on it:
-			"width"      the advance with of the glyph
+			"width"      the advance width of the glyph
 			"height"     the advance height of the glyph
 			"unicodes"   a list of unicode values for this glyph
 			"note"       a string
@@ -422,10 +420,10 @@ class GlyphSet(object):
 		if (
 			self._havePreviousFile
 			and self.fs.exists(fileName)
-			and data == self.fs.getbytes(fileName)
+			and data == self.fs.readbytes(fileName)
 		):
 			return
-		self.fs.setbytes(fileName, data)
+		self.fs.writebytes(fileName, data)
 
 	def deleteGlyph(self, glyphName):
 		"""Permanently delete the glyph from the glyph set on disk. Will
