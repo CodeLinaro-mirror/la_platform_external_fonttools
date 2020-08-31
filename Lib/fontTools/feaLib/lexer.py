@@ -1,13 +1,15 @@
-from __future__ import print_function, division, absolute_import
-from __future__ import unicode_literals
 from fontTools.misc.py23 import *
 from fontTools.feaLib.error import FeatureLibError, IncludedFeaNotFound
+from fontTools.feaLib.location import FeatureLibLocation
 import re
 import os
 
 
 class Lexer(object):
     NUMBER = "NUMBER"
+    HEXADECIMAL = "HEXADECIMAL"
+    OCTAL = "OCTAL"
+    NUMBERS = (NUMBER, HEXADECIMAL, OCTAL)
     FLOAT = "FLOAT"
     STRING = "STRING"
     NAME = "NAME"
@@ -56,7 +58,7 @@ class Lexer(object):
 
     def location_(self):
         column = self.pos_ - self.line_start_ + 1
-        return (self.filename_ or "<features>", self.line_, column)
+        return FeatureLibLocation(self.filename_ or "<features>", self.line_, column)
 
     def next_(self):
         self.scan_over_(Lexer.CHAR_WHITESPACE_)
@@ -125,7 +127,10 @@ class Lexer(object):
         if cur_char == "0" and next_char in "xX":
             self.pos_ += 2
             self.scan_over_(Lexer.CHAR_HEXDIGIT_)
-            return (Lexer.NUMBER, int(text[start:self.pos_], 16), location)
+            return (Lexer.HEXADECIMAL, int(text[start:self.pos_], 16), location)
+        if cur_char == "0" and next_char in Lexer.CHAR_DIGIT_:
+            self.scan_over_(Lexer.CHAR_DIGIT_)
+            return (Lexer.OCTAL, int(text[start:self.pos_], 8), location)
         if cur_char in Lexer.CHAR_DIGIT_:
             self.scan_over_(Lexer.CHAR_DIGIT_)
             if self.pos_ >= limit or text[self.pos_] != ".":
@@ -186,9 +191,33 @@ class Lexer(object):
 
 
 class IncludingLexer(object):
-    def __init__(self, featurefile):
+    """A Lexer that follows include statements.
+
+    The OpenType feature file specification states that due to
+    historical reasons, relative imports should be resolved in this 
+    order:
+
+    1. If the source font is UFO format, then relative to the UFO's
+       font directory
+    2. relative to the top-level include file
+    3. relative to the parent include file
+
+    We only support 1 (via includeDir) and 2.
+    """
+
+    def __init__(self, featurefile, *, includeDir=None):
+        """Initializes an IncludingLexer.
+
+        Behavior:
+            If includeDir is passed, it will be used to determine the top-level
+            include directory to use for all encountered include statements. If it is
+            not passed, ``os.path.dirname(featurefile)`` will be considered the
+            include directory.
+        """
+
         self.lexers_ = [self.make_lexer_(featurefile)]
         self.featurefilepath = self.lexers_[0].filename_
+        self.includeDir = includeDir
 
     def __iter__(self):
         return self
@@ -214,7 +243,9 @@ class IncludingLexer(object):
                 if os.path.isabs(fname_token):
                     path = fname_token
                 else:
-                    if self.featurefilepath is not None:
+                    if self.includeDir is not None:
+                        curpath = self.includeDir
+                    elif self.featurefilepath is not None:
                         curpath = os.path.dirname(self.featurefilepath)
                     else:
                         # if the IncludingLexer was initialized from an in-memory
@@ -228,12 +259,8 @@ class IncludingLexer(object):
                                           fname_location)
                 try:
                     self.lexers_.append(self.make_lexer_(path))
-                except IOError as err:
-                    # FileNotFoundError does not exist on Python < 3.3
-                    import errno
-                    if err.errno == errno.ENOENT:
-                        raise IncludedFeaNotFound(fname_token, fname_location)
-                    raise  # pragma: no cover
+                except FileNotFoundError as err:
+                    raise IncludedFeaNotFound(fname_token, fname_location) from err
             else:
                 return (token_type, token, location)
         raise StopIteration()

@@ -1,5 +1,4 @@
 # coding: utf-8
-from __future__ import print_function, division, absolute_import
 from fontTools.misc.py23 import *
 
 otData = [
@@ -88,7 +87,7 @@ otData = [
 
 	('Lookup', [
 		('uint16', 'LookupType', None, None, 'Different enumerations for GSUB and GPOS'),
-		('uint16', 'LookupFlag', None, None, 'Lookup qualifiers'),
+		('LookupFlag', 'LookupFlag', None, None, 'Lookup qualifiers'),
 		('uint16', 'SubTableCount', None, None, 'Number of SubTables for this lookup'),
 		('Offset', 'SubTable', 'SubTableCount', 0, 'Array of offsets to SubTables-from beginning of Lookup table'),
 		('uint16', 'MarkFilteringSet', None, 'LookupFlag & 0x0010', 'If set, indicates that the lookup table structure is followed by a MarkFilteringSet field. The layout engine skips over all mark glyphs not in the mark filtering set indicated.'),
@@ -703,6 +702,7 @@ otData = [
 		('Version', 'Version', None, None, 'Version of the BASE table-initially 0x00010000'),
 		('Offset', 'HorizAxis', None, None, 'Offset to horizontal Axis table-from beginning of BASE table-may be NULL'),
 		('Offset', 'VertAxis', None, None, 'Offset to vertical Axis table-from beginning of BASE table-may be NULL'),
+		('LOffset', 'VarStore', None, 'Version >= 0x00010001', 'Offset to variation store (may be NULL)'),
 	]),
 
 	('Axis', [
@@ -1539,4 +1539,107 @@ otData = [
 		('int16', 'CVTValueArray', 'NumCVTEntries', 0, 'CVT value'),
 	]),
 
+	#
+	# COLR
+	#
+
+	('COLR', [
+		('uint16', 'Version', None, None, 'Table version number (starts at 0).'),
+		('uint16', 'BaseGlyphRecordCount', None, None, 'Number of Base Glyph Records.'),
+		('LOffset', 'BaseGlyphRecordArray', None, None, 'Offset (from beginning of COLR table) to Base Glyph records.'),
+		('LOffset', 'LayerRecordArray', None, None, 'Offset (from beginning of COLR table) to Layer Records.'),
+		('uint16', 'LayerRecordCount', None, None, 'Number of Layer Records.'),
+		('LOffset', 'BaseGlyphV1List', None, 'Version >= 1', 'Offset (from beginning of COLR table) to array of Version-1 Base Glyph records.'),
+		('LOffset', 'VarStore', None, 'Version >= 1', 'Offset to variation store (may be NULL)'),
+	]),
+
+	('BaseGlyphRecordArray', [
+		('BaseGlyphRecord', 'BaseGlyphRecord', 'BaseGlyphRecordCount', 0, 'Base Glyph records.'),
+	]),
+
+	('BaseGlyphRecord', [
+		('GlyphID', 'BaseGlyph', None, None, 'Glyph ID of reference glyph. This glyph is for reference only and is not rendered for color.'),
+		('uint16', 'FirstLayerIndex', None, None, 'Index (from beginning of the Layer Records) to the layer record. There will be numLayers consecutive entries for this base glyph.'),
+		('uint16', 'NumLayers', None, None, 'Number of color layers associated with this glyph.'),
+	]),
+
+	('LayerRecordArray', [
+		('LayerRecord', 'LayerRecord', 'LayerRecordCount', 0, 'Layer records.'),
+	]),
+
+	('LayerRecord', [
+		('GlyphID', 'LayerGlyph', None, None, 'Glyph ID of layer glyph (must be in z-order from bottom to top).'),
+		('uint16', 'PaletteIndex', None, None, 'Index value to use with a selected color palette.'),
+	]),
+
+	('BaseGlyphV1List', [
+		('uint32', 'BaseGlyphCount', None, None, 'Number of Version-1 Base Glyph records'),
+		('struct', 'BaseGlyphV1Record', 'BaseGlyphCount', 0, 'Array of Version-1 Base Glyph records'),
+	]),
+
+	('BaseGlyphV1Record', [
+		('GlyphID', 'BaseGlyph', None, None, 'Glyph ID of reference glyph.'),
+		('LOffset', 'LayerV1List', None, None, 'Offset (from beginning of BaseGlyphV1List) to LayerV1List.'),
+	]),
+
+	('LayerV1List', [
+		('uint32', 'LayerCount', None, None, 'Number of Version-1 Layer records'),
+		('struct', 'LayerV1Record', 'LayerCount', 0, 'Array of Version-1 Layer records'),
+	]),
+
+	('LayerV1Record', [
+		('GlyphID', 'LayerGlyph', None, None, 'Glyph ID of layer glyph (must be in z-order from bottom to top).'),
+		('LOffset', 'Paint', None, None, 'Offset (from beginning of LayerV1List) to Paint subtable.'),
+	]),
+
+	('Affine2x2', [
+		('VarFixed', 'xx', None, None, ''),
+		('VarFixed', 'xy', None, None, ''),
+		('VarFixed', 'yx', None, None, ''),
+		('VarFixed', 'yy', None, None, ''),
+	]),
+
+	('ColorIndex', [
+		('uint16', 'PaletteIndex', None, None, 'Index value to use with a selected color palette.'),
+		('VarF2Dot14', 'Alpha', None, None, 'Values outsided [0.,1.] reserved'),
+	]),
+
+	('ColorStop', [
+		('VarF2Dot14', 'StopOffset', None, None, ''),
+		('ColorIndex', 'Color', None, None, ''),
+	]),
+
+	('ColorLine', [
+		('ExtendMode', 'Extend', None, None, 'Enum {PAD = 0, REPEAT = 1, REFLECT = 2}'),
+		('uint16', 'StopCount', None, None, 'Number of Color stops.'),
+		('ColorStop', 'ColorStop', 'StopCount', 0, 'Array of Color stops.'),
+	]),
+
+	('PaintFormat1', [
+		('uint16', 'PaintFormat', None, None, 'Format identifier-format = 1'),
+		('ColorIndex', 'Color', None, None, 'A solid color paint.'),
+	]),
+
+	('PaintFormat2', [
+		('uint16', 'PaintFormat', None, None, 'Format identifier-format = 2'),
+		('LOffset', 'ColorLine', None, None, 'Offset (from beginning of Paint table) to ColorLine subtable.'),
+		('VarInt16', 'x0', None, None, ''),
+		('VarInt16', 'y0', None, None, ''),
+		('VarInt16', 'x1', None, None, ''),
+		('VarInt16', 'y1', None, None, ''),
+		('VarInt16', 'x2', None, None, ''),
+		('VarInt16', 'y2', None, None, ''),
+	]),
+
+	('PaintFormat3', [
+		('uint16', 'PaintFormat', None, None, 'Format identifier-format = 3'),
+		('LOffset', 'ColorLine', None, None, 'Offset (from beginning of Paint table) to ColorLine subtable.'),
+		('VarInt16', 'x0', None, None, ''),
+		('VarInt16', 'y0', None, None, ''),
+		('VarUInt16', 'r0', None, None, ''),
+		('VarInt16', 'x1', None, None, ''),
+		('VarInt16', 'y1', None, None, ''),
+		('VarUInt16', 'r1', None, None, ''),
+		('LOffsetTo(Affine2x2)', 'Transform', None, None, 'Offset (from beginning of Paint table) to Affine2x2 subtable.'),
+	]),
 ]
