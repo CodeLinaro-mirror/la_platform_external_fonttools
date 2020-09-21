@@ -6,8 +6,6 @@
 # http://monotype.github.io/OpenType_Table_Source/otl_source.html
 # https://github.com/Monotype/OpenType_Table_Source/
 
-from __future__ import print_function, division, absolute_import
-from __future__ import unicode_literals
 from fontTools.misc.py23 import *
 from fontTools import ttLib
 from fontTools.ttLib.tables._c_m_a_p import cmap_classes
@@ -856,7 +854,7 @@ def parseLookup(lines, tableTag, font, lookupMap=None):
 
 	lookup.SubTable = subtables
 	lookup.SubTableCount = len(lookup.SubTable)
-	if lookup.SubTableCount is 0:
+	if lookup.SubTableCount == 0:
 		# Remove this return when following is fixed:
 		# https://github.com/fonttools/fonttools/issues/789
 		return None
@@ -1153,6 +1151,7 @@ def build(f, font, tableTag=None):
 
 
 def main(args=None, font=None):
+	"""Convert a FontDame OTL file to TTX XML"""
 	import sys
 	from fontTools import configLogger
 	from fontTools.misc.testTools import MockFont
@@ -1165,17 +1164,31 @@ def main(args=None, font=None):
 	# comment this out to enable debug messages from mtiLib's logger
 	# log.setLevel(logging.DEBUG)
 
-	if font is None:
-		font = MockFont()
+	import argparse
+	parser = argparse.ArgumentParser(
+		"fonttools mtiLib",
+		description=main.__doc__,
+	)
 
-	tableTag = None
-	if args[0].startswith('-t'):
-		tableTag = args[0][2:]
-		del args[0]
-	for f in args:
+	parser.add_argument('--font', '-f', metavar='FILE', dest="font",
+		help="Input TTF files (used for glyph classes and sorting coverage tables)")
+	parser.add_argument('--table', '-t', metavar='TABLE', dest="tableTag",
+		help="Table to fill (sniffed from input file if not provided)")
+	parser.add_argument('inputs', metavar='FILE', type=str, nargs='+',
+		help="Input FontDame .txt files")
+
+	args = parser.parse_args(args)
+
+	if font is None:
+		if args.font:
+			font = ttLib.TTFont(args.font)
+		else:
+			font = MockFont()
+
+	for f in args.inputs:
 		log.debug("Processing %s", f)
 		with open(f, 'rt', encoding="utf-8") as f:
-			table = build(f, font, tableTag=tableTag)
+			table = build(f, font, tableTag=args.tableTag)
 		blob = table.compile(font) # Make sure it compiles
 		decompiled = table.__class__()
 		decompiled.decompile(blob, font) # Make sure it decompiles!

@@ -86,7 +86,6 @@ usage: ttx [options] inputfile1 [... inputfileN]
 """
 
 
-from __future__ import print_function, division, absolute_import
 from fontTools.misc.py23 import *
 from fontTools.ttLib import TTFont, TTLibError
 from fontTools.misc.macCreatorType import getMacCreatorAndType
@@ -385,6 +384,7 @@ def waitForKeyPress():
 
 
 def main(args=None):
+	"""Convert OpenType fonts to XML and back"""
 	from fontTools import configLogger
 
 	if args is None:

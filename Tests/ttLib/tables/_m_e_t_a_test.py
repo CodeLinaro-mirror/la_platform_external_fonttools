@@ -1,4 +1,3 @@
-from __future__ import print_function, division, absolute_import, unicode_literals
 from fontTools.misc.py23 import *
 from fontTools.misc.testTools import parseXML
 from fontTools.misc.textTools import deHexStr
@@ -56,6 +55,19 @@ class MetaTableTest(unittest.TestCase):
         self.assertEqual([
             '<hexdata tag="TEST">',
                 'cafebeef',
+            '</hexdata>'
+        ], [line.strip() for line in xml.splitlines()][1:])
+
+    def test_toXML_ascii_data(self):
+        table = table__m_e_t_a()
+        table.data["TEST"] = b"Hello!"
+        writer = XMLWriter(BytesIO())
+        table.toXML(writer, {"meta": table})
+        xml = writer.file.getvalue().decode("utf-8")
+        self.assertEqual([
+            '<hexdata tag="TEST">',
+                '<!-- ascii: Hello! -->',
+                '48656c6c 6f21',
             '</hexdata>'
         ], [line.strip() for line in xml.splitlines()][1:])
 

@@ -1,5 +1,3 @@
-from __future__ import print_function, division, absolute_import
-from __future__ import unicode_literals
 from fontTools.misc.py23 import *
 from fontTools.misc.loggingTools import CapturingLogHandler
 from fontTools.feaLib.builder import Builder, addOpenTypeFeatures, \
@@ -43,8 +41,9 @@ def makeTTFont():
         a_n_d T_h T_h.swash germandbls ydieresis yacute breve
         grave acute dieresis macron circumflex cedilla umlaut ogonek caron
         damma hamza sukun kasratan lam_meem_jeem noon.final noon.initial
-        by feature lookup sub table
+        by feature lookup sub table uni0327 uni0328 e.fina
     """.split()
+    glyphs.extend("cid{:05d}".format(cid) for cid in range(800, 1001 + 1))
     font = TTFont()
     font.setGlyphOrder(glyphs)
     return font
@@ -53,7 +52,7 @@ def makeTTFont():
 class BuilderTest(unittest.TestCase):
     # Feature files in data/*.fea; output gets compared to data/*.ttx.
     TEST_FEATURE_FILES = """
-        Attach enum markClass language_required
+        Attach cid_range enum markClass language_required
         GlyphClassDef LigatureCaretByIndex LigatureCaretByPos
         lookup lookupflag feature_aalt ignore_pos
         GPOS_1 GPOS_1_zero GPOS_2 GPOS_2b GPOS_3 GPOS_4 GPOS_5 GPOS_6 GPOS_8
@@ -72,6 +71,8 @@ class BuilderTest(unittest.TestCase):
         ZeroValue_ChainSinglePos_horizontal ZeroValue_ChainSinglePos_vertical
         PairPosSubtable ChainSubstSubtable ChainPosSubtable LigatureSubtable
         AlternateSubtable MultipleSubstSubtable SingleSubstSubtable
+        aalt_chain_contextual_subst AlternateChained MultipleLookupsPerGlyph
+        MultipleLookupsPerGlyph2
     """.split()
 
     def __init__(self, methodName):
@@ -189,6 +190,17 @@ class BuilderTest(unittest.TestCase):
             "    sub A from [A.alt1 A.alt2];"
             "} test;")
 
+    def test_singleSubst_multipleIdenticalSubstitutionsForSameGlyph_info(self):
+        logger = logging.getLogger("fontTools.feaLib.builder")
+        with CapturingLogHandler(logger, "INFO") as captor:
+            self.build(
+                "feature test {"
+                "    sub A by A.sc;"
+                "    sub B by B.sc;"
+                "    sub A by A.sc;"
+                "} test;")
+        captor.assertRegex('Removing duplicate single substitution from glyph "A" to "A.sc"')
+
     def test_multipleSubst_multipleSubstitutionsForSameGlyph(self):
         self.assertRaisesRegex(
             FeatureLibError,
@@ -197,12 +209,23 @@ class BuilderTest(unittest.TestCase):
             "feature test {"
             "    sub f_f_i by f f i;"
             "    sub c_t by c t;"
-            "    sub f_f_i by f f i;"
+            "    sub f_f_i by f_f i;"
             "} test;")
+
+    def test_multipleSubst_multipleIdenticalSubstitutionsForSameGlyph_info(self):
+        logger = logging.getLogger("fontTools.feaLib.builder")
+        with CapturingLogHandler(logger, "INFO") as captor:
+            self.build(
+                "feature test {"
+                "    sub f_f_i by f f i;"
+                "    sub c_t by c t;"
+                "    sub f_f_i by f f i;"
+                "} test;")
+        captor.assertRegex(r"Removing duplicate multiple substitution from glyph \"f_f_i\" to \('f', 'f', 'i'\)")
 
     def test_pairPos_redefinition_warning(self):
         # https://github.com/fonttools/fonttools/issues/1147
-        logger = logging.getLogger("fontTools.feaLib.builder")
+        logger = logging.getLogger("fontTools.otlLib.builder")
         with CapturingLogHandler(logger, "DEBUG") as captor:
             # the pair "yacute semicolon" is redefined in the enum pos
             font = self.build(
@@ -315,6 +338,12 @@ class BuilderTest(unittest.TestCase):
             "Script statements are not allowed within \"feature size\"",
             self.build, "feature size { script latn; } size;")
 
+    def test_script_in_standalone_lookup(self):
+        self.assertRaisesRegex(
+            FeatureLibError,
+            "Script statements are not allowed within standalone lookup blocks",
+            self.build, "lookup test { script latn; } test;")
+
     def test_language(self):
         builder = Builder(makeTTFont(), (None, None))
         builder.add_language_system(None, 'latn', 'FRA ')
@@ -341,6 +370,12 @@ class BuilderTest(unittest.TestCase):
             FeatureLibError,
             "Language statements are not allowed within \"feature size\"",
             self.build, "feature size { language FRA; } size;")
+
+    def test_language_in_standalone_lookup(self):
+        self.assertRaisesRegex(
+            FeatureLibError,
+            "Language statements are not allowed within standalone lookup blocks",
+            self.build, "lookup test { language FRA; } test;")
 
     def test_language_required_duplicate(self):
         self.assertRaisesRegex(
@@ -395,6 +430,28 @@ class BuilderTest(unittest.TestCase):
             FeatureLibError,
             "Lookup blocks cannot be placed inside 'aalt' features",
             self.build, "feature aalt {lookup L {} L;} aalt;")
+
+    def test_chain_subst_refrences_GPOS_looup(self):
+        self.assertRaisesRegex(
+            FeatureLibError,
+            "Missing index of the specified lookup, might be a positioning lookup",
+            self.build,
+            "lookup dummy { pos a 50; } dummy;"
+            "feature test {"
+            "    sub a' lookup dummy b;"
+            "} test;"
+        )
+
+    def test_chain_pos_refrences_GSUB_looup(self):
+        self.assertRaisesRegex(
+            FeatureLibError,
+            "Missing index of the specified lookup, might be a substitution lookup",
+            self.build,
+            "lookup dummy { sub a by A; } dummy;"
+            "feature test {"
+            "    pos a' lookup dummy b;"
+            "} test;"
+        )
 
     def test_extensions(self):
         class ast_BaseClass(ast.MarkClass):
@@ -504,7 +561,7 @@ class BuilderTest(unittest.TestCase):
         assert "GSUB" not in font2
 
     def test_build_unsupported_tables(self):
-        self.assertRaises(AssertionError, self.build, "", tables={"FOO"})
+        self.assertRaises(NotImplementedError, self.build, "", tables={"FOO"})
 
     def test_build_pre_parsed_ast_featurefile(self):
         f = UnicodeIO("feature liga {sub f i by f_i;} liga;")
@@ -514,7 +571,7 @@ class BuilderTest(unittest.TestCase):
         assert "GSUB" in font
 
     def test_unsupported_subtable_break(self):
-        logger = logging.getLogger("fontTools.feaLib.builder")
+        logger = logging.getLogger("fontTools.otlLib.builder")
         with CapturingLogHandler(logger, level='WARNING') as captor:
             self.build(
                 "feature test {"
@@ -540,6 +597,26 @@ class BuilderTest(unittest.TestCase):
         font = self.build(features, tables=["GSUB"])
         self.assertIn("GSUB", font)
         self.assertNotIn("name", font)
+
+    def test_singlePos_multiplePositionsForSameGlyph(self):
+        self.assertRaisesRegex(
+            FeatureLibError,
+            "Already defined different position for glyph",
+            self.build,
+            "lookup foo {"
+            "    pos A -45; "
+            "    pos A 45; "
+            "} foo;")
+
+    def test_pairPos_enumRuleOverridenBySinglePair_DEBUG(self):
+        logger = logging.getLogger("fontTools.otlLib.builder")
+        with CapturingLogHandler(logger, "DEBUG") as captor:
+            self.build(
+                "feature test {"
+                "    enum pos A [V Y] -80;"
+                "    pos A V -75;"
+                "} test;")
+        captor.assertRegex('Already defined position for pair A V at')
 
 
 def generate_feature_file_test(name):

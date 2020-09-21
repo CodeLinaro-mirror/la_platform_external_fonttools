@@ -2,7 +2,6 @@
 #
 # Google Author(s): Behdad Esfahbod
 
-from __future__ import print_function, division, absolute_import
 from fontTools.misc.py23 import *
 from fontTools.misc.fixedTools import otRound
 from fontTools import ttLib
@@ -547,6 +546,11 @@ def prune_post_subset(self, font, options):
 	if not options.hinting:
 		# Drop device tables
 		self.ValueFormat &= ~0x00F0
+	# Downgrade to Format 1 if all ValueRecords are the same
+	if self.Format == 2 and all(v == self.Value[0] for v in self.Value):
+		self.Format = 1
+		self.Value = self.Value[0] if self.ValueFormat != 0 else None
+		del self.ValueCount
 	return True
 
 @_add_method(otTables.PairPos)
@@ -890,15 +894,17 @@ def __subset_classify_context(self):
 				self.ClassDef = 'InputClassDef' if Chain else 'ClassDef'
 				self.ClassDefIndex = 1 if Chain else 0
 				self.Input = 'Input' if Chain else 'Class'
+			elif Format == 3:
+				self.Input = 'InputCoverage' if Chain else 'Coverage'
 
 	if self.Format not in [1, 2, 3]:
 		return None	# Don't shoot the messenger; let it go
-	if not hasattr(self.__class__, "__ContextHelpers"):
-		self.__class__.__ContextHelpers = {}
-	if self.Format not in self.__class__.__ContextHelpers:
+	if not hasattr(self.__class__, "_subset__ContextHelpers"):
+		self.__class__._subset__ContextHelpers = {}
+	if self.Format not in self.__class__._subset__ContextHelpers:
 		helper = ContextHelper(self.__class__, self.Format)
-		self.__class__.__ContextHelpers[self.Format] = helper
-	return self.__class__.__ContextHelpers[self.Format]
+		self.__class__._subset__ContextHelpers[self.Format] = helper
+	return self.__class__._subset__ContextHelpers[self.Format]
 
 @_add_method(otTables.ContextSubst,
 			 otTables.ChainContextSubst)
@@ -972,6 +978,7 @@ def closure_glyphs(self, s, cur_glyphs):
 		if not all(x.intersect(s.glyphs) for x in c.RuleData(self)):
 			return []
 		r = self
+		input_coverages = getattr(r, c.Input)
 		chaos = set()
 		for ll in getattr(r, c.LookupRecord):
 			if not ll: continue
@@ -983,11 +990,11 @@ def closure_glyphs(self, s, cur_glyphs):
 				if seqi == 0:
 					pos_glyphs = frozenset(cur_glyphs)
 				else:
-					pos_glyphs = frozenset(r.InputCoverage[seqi].intersect_glyphs(s.glyphs))
+					pos_glyphs = frozenset(input_coverages[seqi].intersect_glyphs(s.glyphs))
 			lookup = s.table.LookupList.Lookup[ll.LookupListIndex]
 			chaos.add(seqi)
 			if lookup.may_have_non_1to1():
-				chaos.update(range(seqi, len(r.InputCoverage)+1))
+				chaos.update(range(seqi, len(input_coverages)+1))
 			lookup.closure_glyphs(s, cur_glyphs=pos_glyphs)
 	else:
 		assert 0, "unknown format: %s" % self.Format
@@ -1308,14 +1315,23 @@ def subset_features(self, feature_indices):
 	self.ensureDecompiled()
 	self.SubstitutionRecord = [r for r in self.SubstitutionRecord
 				     if r.FeatureIndex in feature_indices]
+	# remap feature indices
+	for r in self.SubstitutionRecord:
+		r.FeatureIndex = feature_indices.index(r.FeatureIndex)
 	self.SubstitutionCount = len(self.SubstitutionRecord)
 	return bool(self.SubstitutionCount)
 
 @_add_method(otTables.FeatureVariations)
 def subset_features(self, feature_indices):
 	self.ensureDecompiled()
-	self.FeaturVariationRecord = [r for r in self.FeatureVariationRecord
-					if r.FeatureTableSubstitution.subset_features(feature_indices)]
+	for r in self.FeatureVariationRecord:
+		r.FeatureTableSubstitution.subset_features(feature_indices)
+	# Prune empty records at the end only
+	# https://github.com/fonttools/fonttools/issues/1881
+	while (self.FeatureVariationRecord and
+		not self.FeatureVariationRecord[-1]
+			.FeatureTableSubstitution.SubstitutionCount):
+		self.FeatureVariationRecord.pop()
 	self.FeatureVariationCount = len(self.FeatureVariationRecord)
 	return bool(self.FeatureVariationCount)
 
@@ -1387,9 +1403,14 @@ def subset_glyphs(self, s):
 # CBDT will inherit it
 @_add_method(ttLib.getTableClass('EBDT'))
 def subset_glyphs(self, s):
-  self.strikeData = [{g: strike[g] for g in s.glyphs if g in strike}
-					 for strike in self.strikeData]
-  return True
+	strikeData = [
+		{g: strike[g] for g in s.glyphs if g in strike}
+		for strike in self.strikeData
+	]
+	# Prune empty strikes
+	# https://github.com/fonttools/fonttools/issues/1633
+	self.strikeData = [strike for strike in strikeData if strike]
+	return True
 
 @_add_method(ttLib.getTableClass('sbix'))
 def subset_glyphs(self, s):
@@ -1613,11 +1634,11 @@ def prune_post_subset(self, font, options):
 	#if table.ScriptList and not table.ScriptList.ScriptRecord:
 	#	table.ScriptList = None
 
-	if not table.FeatureList and hasattr(table, 'FeatureVariations'):
-		table.FeatureVariations = None
+	if hasattr(table, 'FeatureVariations'):
+		if not (table.FeatureList and table.FeatureVariations.FeatureVariationRecord):
+			table.FeatureVariations = None
 
-	if hasattr(table, 'FeatureVariations') and not table.FeatureVariations:
-		if table.Version == 0x00010001:
+		if not table.FeatureVariations and table.Version == 0x00010001:
 			table.Version = 0x00010000
 
 	return True
@@ -2076,7 +2097,7 @@ def remapComponentsFast(self, glyphidmap):
 		elif flags & 0x0080: i += 8	# WE_HAVE_A_TWO_BY_TWO
 		more = flags & 0x0020	# MORE_COMPONENTS
 
-	self.data = data.tostring()
+	self.data = data.tobytes()
 
 @_add_method(ttLib.getTableClass('glyf'))
 def closure_glyphs(self, s):
@@ -2760,6 +2781,7 @@ def usage():
 
 @timer("make one with everything (TOTAL TIME)")
 def main(args=None):
+	"""OpenType font subsetter and optimizer"""
 	from os.path import splitext
 	from fontTools import configLogger
 
