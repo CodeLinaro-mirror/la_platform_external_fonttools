@@ -182,6 +182,7 @@ Lib/fontTools/feaLib/builder.py
 Lib/fontTools/feaLib/error.py
 Lib/fontTools/feaLib/lexer.py
 Lib/fontTools/feaLib/location.py
+Lib/fontTools/feaLib/lookupDebugInfo.py
 Lib/fontTools/feaLib/parser.py
 Lib/fontTools/misc/__init__.py
 Lib/fontTools/misc/arrayTools.py
@@ -199,7 +200,6 @@ Lib/fontTools/misc/intTools.py
 Lib/fontTools/misc/loggingTools.py
 Lib/fontTools/misc/macCreatorType.py
 Lib/fontTools/misc/macRes.py
-Lib/fontTools/misc/plistlib.py
 Lib/fontTools/misc/psCharStrings.py
 Lib/fontTools/misc/psLib.py
 Lib/fontTools/misc/psOperators.py
@@ -212,6 +212,8 @@ Lib/fontTools/misc/timeTools.py
 Lib/fontTools/misc/transform.py
 Lib/fontTools/misc/xmlReader.py
 Lib/fontTools/misc/xmlWriter.py
+Lib/fontTools/misc/plistlib/__init__.py
+Lib/fontTools/misc/plistlib/py.typed
 Lib/fontTools/mtiLib/__init__.py
 Lib/fontTools/mtiLib/__main__.py
 Lib/fontTools/otlLib/__init__.py
@@ -225,6 +227,7 @@ Lib/fontTools/pens/boundsPen.py
 Lib/fontTools/pens/cocoaPen.py
 Lib/fontTools/pens/cu2quPen.py
 Lib/fontTools/pens/filterPen.py
+Lib/fontTools/pens/hashPointPen.py
 Lib/fontTools/pens/momentsPen.py
 Lib/fontTools/pens/perimeterPen.py
 Lib/fontTools/pens/pointInsidePen.py
@@ -252,6 +255,7 @@ Lib/fontTools/svgLib/path/shapes.py
 Lib/fontTools/t1Lib/__init__.py
 Lib/fontTools/ttLib/__init__.py
 Lib/fontTools/ttLib/macUtils.py
+Lib/fontTools/ttLib/removeOverlaps.py
 Lib/fontTools/ttLib/sfnt.py
 Lib/fontTools/ttLib/standardGlyphOrder.py
 Lib/fontTools/ttLib/ttCollection.py
@@ -266,6 +270,7 @@ Lib/fontTools/ttLib/tables/C_F_F__2.py
 Lib/fontTools/ttLib/tables/C_O_L_R_.py
 Lib/fontTools/ttLib/tables/C_P_A_L_.py
 Lib/fontTools/ttLib/tables/D_S_I_G_.py
+Lib/fontTools/ttLib/tables/D__e_b_g.py
 Lib/fontTools/ttLib/tables/DefaultTable.py
 Lib/fontTools/ttLib/tables/E_B_D_T_.py
 Lib/fontTools/ttLib/tables/E_B_L_C_.py
@@ -402,6 +407,7 @@ MetaTools/roundTrip.py
 Snippets/README.md
 Snippets/checksum.py
 Snippets/cmap-format.py
+Snippets/decompose-ttf.py
 Snippets/dump_woff_metadata.py
 Snippets/edit_raw_table_data.py
 Snippets/fix-dflt-langsys.py
@@ -610,6 +616,8 @@ Tests/feaLib/data/PairPosSubtable.fea
 Tests/feaLib/data/PairPosSubtable.ttx
 Tests/feaLib/data/SingleSubstSubtable.fea
 Tests/feaLib/data/SingleSubstSubtable.ttx
+Tests/feaLib/data/SubstSubtable.fea
+Tests/feaLib/data/SubstSubtable.ttx
 Tests/feaLib/data/ZeroValue_ChainSinglePos_horizontal.fea
 Tests/feaLib/data/ZeroValue_ChainSinglePos_horizontal.ttx
 Tests/feaLib/data/ZeroValue_ChainSinglePos_vertical.fea
@@ -667,6 +675,7 @@ Tests/feaLib/data/ignore_pos.ttx
 Tests/feaLib/data/include0.fea
 Tests/feaLib/data/language_required.fea
 Tests/feaLib/data/language_required.ttx
+Tests/feaLib/data/lookup-debug.ttx
 Tests/feaLib/data/lookup.fea
 Tests/feaLib/data/lookup.ttx
 Tests/feaLib/data/lookupflag.fea
@@ -865,6 +874,7 @@ Tests/pens/areaPen_test.py
 Tests/pens/basePen_test.py
 Tests/pens/boundsPen_test.py
 Tests/pens/cu2quPen_test.py
+Tests/pens/hashPointPen_test.py
 Tests/pens/perimeterPen_test.py
 Tests/pens/pointInsidePen_test.py
 Tests/pens/pointPen_test.py
@@ -951,6 +961,7 @@ Tests/t1Lib/data/TestT1-Regular.pfa
 Tests/t1Lib/data/TestT1-Regular.pfb
 Tests/t1Lib/data/TestT1-weird-zeros.pfa
 Tests/ttLib/sfnt_test.py
+Tests/ttLib/ttFont_test.py
 Tests/ttLib/woff2_test.py
 Tests/ttLib/data/TestOTF-Regular.otx
 Tests/ttLib/data/TestTTF-Regular.ttx
@@ -1689,6 +1700,7 @@ Tests/varLib/data/BuildAvarIdentityMaps.designspace
 Tests/varLib/data/BuildAvarSingleAxis.designspace
 Tests/varLib/data/BuildGvarCompositeExplicitDelta.designspace
 Tests/varLib/data/FeatureVars.designspace
+Tests/varLib/data/FeatureVarsCustomTag.designspace
 Tests/varLib/data/FeatureVarsWholeRange.designspace
 Tests/varLib/data/FeatureVarsWholeRangeEmpty.designspace
 Tests/varLib/data/InterpolateLayout.designspace
@@ -1697,6 +1709,7 @@ Tests/varLib/data/InterpolateLayout3.designspace
 Tests/varLib/data/KerningMerging.designspace
 Tests/varLib/data/PartialInstancerTest-VF.ttx
 Tests/varLib/data/PartialInstancerTest2-VF.ttx
+Tests/varLib/data/PartialInstancerTest3-VF.ttx
 Tests/varLib/data/SingleMaster.designspace
 Tests/varLib/data/SparseMasters.designspace
 Tests/varLib/data/TestBASE.designspace
@@ -2030,6 +2043,7 @@ Tests/varLib/data/test_results/BuildGvarCompositeExplicitDelta.ttx
 Tests/varLib/data/test_results/BuildMain.ttx
 Tests/varLib/data/test_results/BuildTestCFF2.ttx
 Tests/varLib/data/test_results/FeatureVars.ttx
+Tests/varLib/data/test_results/FeatureVarsCustomTag.ttx
 Tests/varLib/data/test_results/FeatureVarsWholeRange.ttx
 Tests/varLib/data/test_results/FeatureVars_rclt.ttx
 Tests/varLib/data/test_results/InterpolateLayout.ttx
@@ -2051,8 +2065,8 @@ Tests/varLib/data/test_results/InterpolateLayoutGPOS_5_diff.ttx
 Tests/varLib/data/test_results/InterpolateLayoutGPOS_5_same.ttx
 Tests/varLib/data/test_results/InterpolateLayoutGPOS_6_diff.ttx
 Tests/varLib/data/test_results/InterpolateLayoutGPOS_6_same.ttx
-Tests/varLib/data/test_results/InterpolateLayoutGPOS_8_diff.ttx
-Tests/varLib/data/test_results/InterpolateLayoutGPOS_8_same.ttx
+Tests/varLib/data/test_results/InterpolateLayoutGPOS_7_diff.ttx
+Tests/varLib/data/test_results/InterpolateLayoutGPOS_7_same.ttx
 Tests/varLib/data/test_results/InterpolateLayoutGPOS_size_feat_same.ttx
 Tests/varLib/data/test_results/InterpolateLayoutMain.ttx
 Tests/varLib/data/test_results/InterpolateTestCFF2VF.ttx
@@ -2065,6 +2079,9 @@ Tests/varLib/data/test_results/PartialInstancerTest2-VF-instance-400,100.ttx
 Tests/varLib/data/test_results/PartialInstancerTest2-VF-instance-400,62.5.ttx
 Tests/varLib/data/test_results/PartialInstancerTest2-VF-instance-900,100.ttx
 Tests/varLib/data/test_results/PartialInstancerTest2-VF-instance-900,62.5.ttx
+Tests/varLib/data/test_results/PartialInstancerTest3-VF-instance-400-no-overlap-flags.ttx
+Tests/varLib/data/test_results/PartialInstancerTest3-VF-instance-400-no-overlaps.ttx
+Tests/varLib/data/test_results/PartialInstancerTest3-VF-instance-700-no-overlaps.ttx
 Tests/varLib/data/test_results/SingleMaster.ttx
 Tests/varLib/data/test_results/SparseMasters.ttx
 Tests/varLib/data/test_results/TestBASE.ttx
