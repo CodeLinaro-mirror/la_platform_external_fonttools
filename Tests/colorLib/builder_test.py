@@ -27,6 +27,37 @@ def test_buildCOLR_v0():
     assert colr.ColorLayers["b"][1].colorID == 0
 
 
+def test_buildCOLR_v0_layer_as_list():
+    # when COLRv0 layers are encoded as plist in UFO lib, both python tuples and
+    # lists are encoded as plist array elements; but the latter are always decoded
+    # as python lists, thus after roundtripping a plist tuples become lists.
+    # Before FontTools 4.17.0 we were treating tuples and lists as equivalent;
+    # with 4.17.0, a paint of type list is used to identify a PaintColrLayers.
+    # This broke backward compatibility as ufo2ft is simply passing through the
+    # color layers as read from the UFO lib plist, and as such the latter use lists
+    # instead of tuples for COLRv0 layers (layerGlyph, paletteIndex) combo.
+    # We restore backward compat by accepting either tuples or lists (of length 2
+    # and only containing a str and an int) as individual top-level layers.
+    # https://github.com/googlefonts/ufo2ft/issues/426
+    color_layer_lists = {
+        "a": [["a.color0", 0], ["a.color1", 1]],
+        "b": [["b.color1", 1], ["b.color0", 0]],
+    }
+
+    colr = builder.buildCOLR(color_layer_lists)
+
+    assert colr.tableTag == "COLR"
+    assert colr.version == 0
+    assert colr.ColorLayers["a"][0].name == "a.color0"
+    assert colr.ColorLayers["a"][0].colorID == 0
+    assert colr.ColorLayers["a"][1].name == "a.color1"
+    assert colr.ColorLayers["a"][1].colorID == 1
+    assert colr.ColorLayers["b"][0].name == "b.color1"
+    assert colr.ColorLayers["b"][0].colorID == 1
+    assert colr.ColorLayers["b"][1].name == "b.color0"
+    assert colr.ColorLayers["b"][1].colorID == 0
+
+
 def test_buildCPAL_v0():
     palettes = [
         [(0.68, 0.20, 0.32, 1.0), (0.45, 0.68, 0.21, 1.0)],
@@ -513,7 +544,7 @@ def test_buildPaintComposite():
     composite = layerBuilder.buildPaintComposite(
         mode=ot.CompositeMode.SRC_OVER,
         source={
-            "format": 8,
+            "format": 10,
             "mode": "src_over",
             "source": {"format": 5, "glyph": "c", "paint": 2},
             "backdrop": {"format": 5, "glyph": "b", "paint": 1},
@@ -541,6 +572,44 @@ def test_buildPaintComposite():
     assert composite.BackdropPaint.Glyph == "a"
     assert composite.BackdropPaint.Paint.Format == ot.Paint.Format.PaintSolid
     assert composite.BackdropPaint.Paint.Color.PaletteIndex == 0
+
+
+def test_buildPaintRotate():
+    layerBuilder = LayerV1ListBuilder()
+    paint = layerBuilder.buildPaintRotate(
+        paint=layerBuilder.buildPaintGlyph(
+            "a", layerBuilder.buildPaintSolid(paletteIndex=0, alpha=1.0)
+        ),
+        angle=15,
+        centerX=127,
+        centerY=129,
+    )
+
+    assert paint.Format == ot.Paint.Format.PaintRotate
+    assert paint.Paint.Format == ot.Paint.Format.PaintGlyph
+    assert paint.angle.value == 15
+    assert paint.centerX.value == 127
+    assert paint.centerY.value == 129
+
+
+def test_buildPaintRotate():
+    layerBuilder = LayerV1ListBuilder()
+    paint = layerBuilder.buildPaintSkew(
+        paint=layerBuilder.buildPaintGlyph(
+            "a", layerBuilder.buildPaintSolid(paletteIndex=0, alpha=1.0)
+        ),
+        xSkewAngle=15,
+        ySkewAngle=42,
+        centerX=127,
+        centerY=129,
+    )
+
+    assert paint.Format == ot.Paint.Format.PaintSkew
+    assert paint.Paint.Format == ot.Paint.Format.PaintGlyph
+    assert paint.xSkewAngle.value == 15
+    assert paint.ySkewAngle.value == 42
+    assert paint.centerX.value == 127
+    assert paint.centerY.value == 129
 
 
 def test_buildColrV1():

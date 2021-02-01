@@ -296,13 +296,26 @@ def buildCPAL(
 _DEFAULT_ALPHA = VariableFloat(1.0)
 
 
+def _is_colrv0_layer(layer: Any) -> bool:
+    # Consider as COLRv0 layer any sequence of length 2 (be it tuple or list) in which
+    # the first element is a str (the layerGlyph) and the second element is an int
+    # (CPAL paletteIndex).
+    # https://github.com/googlefonts/ufo2ft/issues/426
+    try:
+        layerGlyph, paletteIndex = layer
+    except (TypeError, ValueError):
+        return False
+    else:
+        return isinstance(layerGlyph, str) and isinstance(paletteIndex, int)
+
+
 def _split_color_glyphs_by_version(
     colorGlyphs: _ColorGlyphsDict,
 ) -> Tuple[_ColorGlyphsV0Dict, _ColorGlyphsDict]:
     colorGlyphsV0 = {}
     colorGlyphsV1 = {}
     for baseGlyph, layers in colorGlyphs.items():
-        if all(isinstance(l, tuple) and isinstance(l[1], int) for l in layers):
+        if all(_is_colrv0_layer(l) for l in layers):
             colorGlyphsV0[baseGlyph] = layers
         else:
             colorGlyphsV1[baseGlyph] = layers
@@ -527,6 +540,38 @@ class LayerV1ListBuilder:
             transform = buildAffine2x3(transform)
         ot_paint.Transform = transform
         ot_paint.Paint = self.buildPaint(paint)
+        return ot_paint
+
+    def buildPaintRotate(
+        self,
+        paint: _PaintInput,
+        angle: _ScalarInput,
+        centerX: _ScalarInput,
+        centerY: _ScalarInput,
+    ) -> ot.Paint:
+        ot_paint = ot.Paint()
+        ot_paint.Format = int(ot.Paint.Format.PaintRotate)
+        ot_paint.Paint = self.buildPaint(paint)
+        ot_paint.angle = _to_variable_f16dot16_float(angle)
+        ot_paint.centerX = _to_variable_f16dot16_float(centerX)
+        ot_paint.centerY = _to_variable_f16dot16_float(centerY)
+        return ot_paint
+
+    def buildPaintSkew(
+        self,
+        paint: _PaintInput,
+        xSkewAngle: _ScalarInput,
+        ySkewAngle: _ScalarInput,
+        centerX: _ScalarInput,
+        centerY: _ScalarInput,
+    ) -> ot.Paint:
+        ot_paint = ot.Paint()
+        ot_paint.Format = int(ot.Paint.Format.PaintSkew)
+        ot_paint.Paint = self.buildPaint(paint)
+        ot_paint.xSkewAngle = _to_variable_f16dot16_float(xSkewAngle)
+        ot_paint.ySkewAngle = _to_variable_f16dot16_float(ySkewAngle)
+        ot_paint.centerX = _to_variable_f16dot16_float(centerX)
+        ot_paint.centerY = _to_variable_f16dot16_float(centerY)
         return ot_paint
 
     def buildPaintComposite(
